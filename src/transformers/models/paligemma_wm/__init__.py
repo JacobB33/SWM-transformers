@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_paligemma": ["PaliGemmaConfig"]}
+_import_structure = {"configuration_paligemma": ["PaliGemmaWMConfig"]}
 
 
 try:
@@ -29,11 +29,12 @@ else:
         "PaliGemmaForConditionalGeneration",
         "PaliGemmaPreTrainedModel",
     ]
-    _import_structure["processing_paligemma"] = ["PaliGemmaProcessor"]
+    _import_structure["processing_paligemma_wm"] = ["PaliGemmaWMProcessor"]
+    _import_structure["action_processor"] = ["PaliGemmaWMActionProcessor"]
 
 
 if TYPE_CHECKING:
-    from .configuration_paligemma import PaliGemmaConfig
+    from .configuration_paligemma import PaliGemmaWMConfig
 
     try:
         if not is_torch_available():
@@ -45,7 +46,8 @@ if TYPE_CHECKING:
             PaliGemmaForConditionalGeneration,
             PaliGemmaPreTrainedModel,
         )
-        from .processing_paligemma import PaliGemmaProcessor
+        from .processing_paligemma_wm import PaliGemmaWMProcessor
+        from .action_processor import PaliGemmaWMActionProcessor
 
 
 else:

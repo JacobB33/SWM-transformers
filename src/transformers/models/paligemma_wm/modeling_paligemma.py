@@ -32,7 +32,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_paligemma import PaliGemmaConfig
+from .configuration_paligemma import PaliGemmaWMConfig
 
 
 if is_flash_attn_2_available():
@@ -43,7 +43,7 @@ from ..auto import AutoModel, AutoModelForCausalLM
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PaliGemmaConfig"
+_CONFIG_FOR_DOC = "PaliGemmaWMConfig"
 
 
 # Adapted from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
@@ -156,7 +156,7 @@ class PaliGemmaCausalLMOutputWithPast(ModelOutput):
 
 
 class PaliGemmaMultiModalProjector(nn.Module):
-    def __init__(self, config: PaliGemmaConfig):
+    def __init__(self, config: PaliGemmaWMConfig):
         super().__init__()
         self.linear = nn.Linear(config.vision_config.hidden_size, config.vision_config.projection_dim, bias=True)
 
@@ -176,7 +176,7 @@ PALIGEMMA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`PaliGemmaConfig`] or [`PaliGemmaVisionConfig`]):
+        config ([`PaliGemmaWMConfig`] or [`PaliGemmaVisionConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -188,7 +188,7 @@ PALIGEMMA_START_DOCSTRING = r"""
     PALIGEMMA_START_DOCSTRING,
 )
 class PaliGemmaPreTrainedModel(PreTrainedModel):
-    config_class = PaliGemmaConfig
+    config_class = PaliGemmaWMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
@@ -297,7 +297,7 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
     PALIGEMMA_START_DOCSTRING,
 )
 class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
-    def __init__(self, config: PaliGemmaConfig):
+    def __init__(self, config: PaliGemmaWMConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)

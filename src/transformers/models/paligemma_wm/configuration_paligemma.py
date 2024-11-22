@@ -23,7 +23,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class PaliGemmaConfig(PretrainedConfig):
+class PaliGemmaWMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PaliGemmaForConditionalGeneration`]. It is used to instantiate an
     PaliGemmamodel according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -39,6 +39,8 @@ class PaliGemmaConfig(PretrainedConfig):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
+        action_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object of the action backbone. Can be any of `GemmaConfig` or `MistralConfig`.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 256000):
@@ -54,7 +56,7 @@ class PaliGemmaConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import PaliGemmaForConditionalGeneration, PaliGemmaConfig, SiglipVisionConfig, GemmaConfig
+    >>> from transformers import PaliGemmaForConditionalGeneration, PaliGemmaWMConfig, SiglipVisionConfig, GemmaConfig
 
     >>> # Initializing a Siglip-like vision config
     >>> vision_config = SiglipVisionConfig()
@@ -63,7 +65,7 @@ class PaliGemmaConfig(PretrainedConfig):
     >>> text_config = GemmaConfig()
 
     >>> # Initializing a PaliGemma paligemma-3b-224 style configuration
-    >>> configuration = PaliGemmaConfig(vision_config, text_config)
+    >>> configuration = PaliGemmaWMConfig(vision_config, text_config)
 
     >>> # Initializing a model from the paligemma-3b-224 style configuration
     >>> model = PaliGemmaForConditionalGeneration(configuration)
@@ -72,13 +74,14 @@ class PaliGemmaConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "paligemma"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    model_type = "paligemma_wm"
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "action_config": AutoConfig}
 
     def __init__(
         self,
         vision_config=None,
         text_config=None,
+        action_config=None,
         ignore_index=-100,
         image_token_index=256000,
         vocab_size=257152,
