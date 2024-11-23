@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch PaliGemmamodel."""
+"""PyTorch PaliGemmaWMmodel."""
 
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -32,7 +32,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_paligemma import PaliGemmaWMConfig
+from .configuration_paligemma_wm import PaliGemmaWMConfig
 
 
 if is_flash_attn_2_available():
@@ -116,9 +116,9 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 
 
 @dataclass
-class PaliGemmaCausalLMOutputWithPast(ModelOutput):
+class PaliGemmaWMCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for PaliGemmacausal language model (or autoregressive) outputs.
+    Base class for PaliGemmaWMcausal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -155,7 +155,7 @@ class PaliGemmaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class PaliGemmaMultiModalProjector(nn.Module):
+class PaliGemmaWMMultiModalProjector(nn.Module):
     def __init__(self, config: PaliGemmaWMConfig):
         super().__init__()
         self.linear = nn.Linear(config.vision_config.hidden_size, config.vision_config.projection_dim, bias=True)
@@ -165,8 +165,17 @@ class PaliGemmaMultiModalProjector(nn.Module):
 
         return hidden_states
 
+class PaliGemmaWMMultiModalActionProjector(nn.Module):
+    def __init__(self, config: PaliGemmaWMConfig):
+        super().__init__()
+        self.linear = nn.Linear(config.action_input_dim, config.vision_config.projection_dim, bias=True)
 
-PALIGEMMA_START_DOCSTRING = r"""
+    def forward(self, image_features):
+        hidden_states = self.linear(image_features)
+
+        return hidden_states
+
+PALIGEMMAWM_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -185,13 +194,13 @@ PALIGEMMA_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    PALIGEMMA_START_DOCSTRING,
+    PALIGEMMAWM_START_DOCSTRING,
 )
-class PaliGemmaPreTrainedModel(PreTrainedModel):
+class PaliGemmaWMPreTrainedModel(PreTrainedModel):
     config_class = PaliGemmaWMConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PaliGemmaMultiModalProjector"]
+    _no_split_modules = ["PaliGemmaWMMultiModalProjector", "PaliGemmaWMMultiModalActionProjector"]
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_quantized_cache = True
@@ -222,7 +231,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-PALIGEMMA_INPUTS_DOCSTRING = r"""
+PALIGEMMAWM_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -294,15 +303,16 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     """The PALIGEMMA model which consists of a vision backbone and a language model.""",
-    PALIGEMMA_START_DOCSTRING,
+    PALIGEMMAWM_START_DOCSTRING,
 )
-class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
+class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, GenerationMixin):
     def __init__(self, config: PaliGemmaWMConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
-        self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
+        self.multi_modal_projector = PaliGemmaWMMultiModalProjector(config)
+        self.action_projector = PaliGemmaWMMultiModalActionProjector(config)
         self.vocab_size = config.text_config.vocab_size
-
+        print(config.action_token_index)
         language_model = AutoModelForCausalLM.from_config(config=config.text_config)
 
         if language_model._tied_weights_keys is not None:
@@ -408,12 +418,16 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         image_features = image_features / (self.config.hidden_size**0.5)
         return image_features
 
-    @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    def get_action_features(self, action_values: torch.FloatTensor):
+        return self.action_projector(action_values) # Project the actions into the same space as the image features
+    
+    @add_start_docstrings_to_model_forward(PALIGEMMAWM_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=PaliGemmaWMCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
+        action_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
@@ -426,7 +440,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         num_logits_to_keep: int = 0,
-    ) -> Union[Tuple, PaliGemmaCausalLMOutputWithPast]:
+    ) -> Union[Tuple, PaliGemmaWMCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -462,7 +476,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "answer en Where is the cow standing?\nbeach"
         ```"""
-
+        if inputs_embeds is not None:
+            raise ValueError("inputs_embeds is not supported in PaliGemmaWMModel.forward(). (Sincec I don't know what they are)")
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -507,6 +522,22 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
+        # merge text and actions
+        if action_values is not None:
+            action_features = self.get_action_features(action_values)
+            special_action_mask = (input_ids == self.config.action_token_index).unsqueeze(-1)
+            special_action_mask = special_action_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if inputs_embeds[special_action_mask].numel() != action_features.numel():
+                action_tokens_in_text = torch.sum(input_ids == self.config.action_token_index)
+                raise ValueError(
+                    f"Number of actions does not match number of special action tokens in the input text. "
+                    f"Got {action_tokens_in_text} action tokens in the text but {action_features.shape[0] * action_features.shape[1]} "
+                    "tokens from action embeddings."
+                )
+            action_features = action_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_action_mask, action_features)
+            
+        
         # mask out pad-token-ids in labels for BC
         if labels is not None and self.pad_token_id in labels:
             logger.warning_once(
@@ -558,7 +589,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return PaliGemmaCausalLMOutputWithPast(
+        return PaliGemmaWMCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -575,13 +606,14 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         cache_position=None,
         position_ids=None,
         pixel_values=None,
+        action_values=None,
         attention_mask=None,
         token_type_ids=None,
         use_cache=True,
         num_logits_to_keep=None,
         **kwargs,
     ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
+        # Overwritten -- custom `position_ids` and `pixel_values` and `action_values` handling
         model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -600,8 +632,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             model_inputs["position_ids"] += 1
 
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
+        # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always. Same for action_values
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
-
+            model_inputs["action_values"] = action_values
         return model_inputs

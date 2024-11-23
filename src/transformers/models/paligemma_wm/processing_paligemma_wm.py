@@ -357,7 +357,7 @@ class PaliGemmaWMProcessor(ProcessorMixin):
             **output_kwargs["text_kwargs"],
         )
         
-        return_data = {**inputs, "pixel_values": pixel_values, "action_vales": action_values}
+        return_data = {**inputs, "pixel_values": pixel_values, "action_values": action_values}
 
         if return_token_type_ids:
             labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)

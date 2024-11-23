@@ -2994,8 +2994,8 @@ else:
     )
     _import_structure["models.paligemma_wm"].extend(
         [
-            "PaliGemmaForConditionalGeneration",
-            "PaliGemmaPreTrainedModel",
+            "PaliGemmaWMForConditionalGeneration",
+            "PaliGemmaWMPreTrainedModel",
             "PaliGemmaWMProcessor",
             "PaliGemmaWMActionProcessor",
         ]
@@ -7599,8 +7599,8 @@ if TYPE_CHECKING:
             PaliGemmaProcessor,
         )
         from .models.paligemma_wm import (
-            PaliGemmaForConditionalGeneration,
-            PaliGemmaPreTrainedModel,
+            PaliGemmaWMForConditionalGeneration,
+            PaliGemmaWMPreTrainedModel,
             PaliGemmaWMProcessor,
             PaliGemmaWMActionProcessor,
         )

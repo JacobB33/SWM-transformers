@@ -2,7 +2,7 @@ from typing import Any, List
 from ...processing_utils import (
     ProcessorMixin,
 )
-from torch import Tensor
+import torch
 
 class PaliGemmaWMActionProcessor(ProcessorMixin):
     attributes = []
@@ -14,7 +14,10 @@ class PaliGemmaWMActionProcessor(ProcessorMixin):
         self.action_seq_length = action_seq_length    
         super().__init__()
         
-    def __call__(self, inputs: List[List[Tensor]]):
-        # dummy action processing code. Can do something smarter here.
-        return inputs, [len(input) for input in inputs]
+    def __call__(self, inputs: List[List[torch.Tensor]]):
+        # flatten the actions and return the list of lengths
+        lengths = [len(input) for input in inputs]
+        # TODO optimize this? 
+        flattened_action = [action for input in inputs for action in input]
+        return torch.stack(flattened_action), lengths
     
