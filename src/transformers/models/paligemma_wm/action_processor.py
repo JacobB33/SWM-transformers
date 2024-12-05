@@ -18,6 +18,7 @@ class PaliGemmaWMActionProcessor(ProcessorMixin):
         # flatten the actions and return the list of lengths
         lengths = [len(input) for input in inputs]
         # TODO optimize this? 
-        flattened_action = [action for input in inputs for action in input]
+        flattened_action = [action if isinstance(action, torch.Tensor) else torch.from_numpy(action) for input in inputs for action in input]
+
         return torch.stack(flattened_action), lengths
     
