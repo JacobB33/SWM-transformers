@@ -1465,6 +1465,7 @@ class GenerationMixin:
         elif (
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
+            and input_ids_length != 0
             and not self.config.is_encoder_decoder
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
@@ -1633,17 +1634,18 @@ class GenerationMixin:
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
             def get_layer_device_map(execution_device_map: Optional[dict] = None):
+                num_hidden_layers = self.config.get_text_config().num_hidden_layers
                 if execution_device_map is None:
                     return None
                 elif len(execution_device_map) == 1 and "" in execution_device_map:
-                    return {idx: execution_device_map[""] for idx in range(self.config.num_hidden_layers)}
+                    return {idx: execution_device_map[""] for idx in range(num_hidden_layers)}
                 layer_device_map = {}
                 for layer in execution_device_map:
-                    for idx in range(self.config.num_hidden_layers):
+                    for idx in range(num_hidden_layers):
                         if f".{idx}." in f"{layer}.":
                             layer_device_map[idx] = execution_device_map[layer]
                             break
-                for idx in range(self.config.num_hidden_layers):
+                for idx in range(num_hidden_layers):
                     if idx not in layer_device_map:
                         raise RuntimeError(f"layer {idx} has not been mapped to a device.")
                 return layer_device_map
@@ -1692,6 +1694,7 @@ class GenerationMixin:
             self._supports_cache_class
             and "jamba" not in self.__class__.__name__.lower()
             and "zamba" not in self.__class__.__name__.lower()
+            and "bamba" not in self.__class__.__name__.lower()
         )
 
     def _prepare_cache_for_generation(
@@ -4259,9 +4262,10 @@ class GenerationMixin:
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[-1]
 
-            #  1. Fetch candidate sequences from a `CandidateGenerator`
+            #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
 
+            candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
 
