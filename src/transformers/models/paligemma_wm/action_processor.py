@@ -17,6 +17,9 @@ class PaliGemmaWMActionProcessor(ProcessorMixin):
     def __call__(self, inputs: List[List[torch.Tensor]]):
         # flatten the actions and return the list of lengths
         lengths = [len(input) for input in inputs]
+        if sum(lengths) == 0:
+            # we know that there is no actions, and it is a list of empty actions
+            return None, lengths
         # TODO optimize this? 
         flattened_action = [action if isinstance(action, torch.Tensor) else torch.from_numpy(action) for input in inputs for action in input]
 

@@ -291,7 +291,10 @@ class PaliGemmaWMProcessor(ProcessorMixin):
         
         if actions is not None:
             # They have actions so tokenize them and get a list of the lengths 
-            if not isinstance(actions[0], list):
+            if len(actions) == 0:
+                # it is the empty list
+                actions = [actions]
+            elif not isinstance(actions[0], list):
                 actions = [actions]
             action_values, action_lengths = self.action_processor(actions)
         else:
