@@ -3,6 +3,7 @@ from ...processing_utils import (
     ProcessorMixin,
 )
 import torch
+import numpy as np
 
 class PaliGemmaWMActionProcessor(ProcessorMixin):
     attributes = []
