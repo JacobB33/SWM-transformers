@@ -20,8 +20,11 @@ class PaliGemmaWMActionProcessor(ProcessorMixin):
         if sum(lengths) == 0:
             # we know that there is no actions, and it is a list of empty actions
             return None, lengths
-        # TODO optimize this? 
-        flattened_action = [action if isinstance(action, torch.Tensor) else torch.from_numpy(action) for input in inputs for action in input]
-
-        return torch.stack(flattened_action), lengths
+        # if sum(lengths) == 0:
+        #     # we know that there is no actions, and it is a list of empty actions
+        #     return None, lengths
+        # # TODO optimize this? 
+        # flattened_action = [action if isinstance(action, torch.Tensor) else torch.from_numpy(action) for input in inputs for action in input]
+        return torch.from_numpy(np.array(inputs)), lengths
+        # return torch.stack(flattened_action), lengths
     

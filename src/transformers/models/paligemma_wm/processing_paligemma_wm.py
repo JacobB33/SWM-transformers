@@ -294,8 +294,10 @@ class PaliGemmaWMProcessor(ProcessorMixin):
             if len(actions) == 0:
                 # it is the empty list
                 actions = [actions]
+                logger.error("shouldn't be in the if")
             elif not isinstance(actions[0], list):
                 actions = [actions]
+                logger.error("shouldn't be in the elif")
             action_values, action_lengths = self.action_processor(actions)
         else:
             action_lengths = [0 for _ in range(len(text))]
@@ -304,12 +306,12 @@ class PaliGemmaWMProcessor(ProcessorMixin):
         
         if text is not None and images is not None:
             if not any(IMAGE_TOKEN in sample for sample in text):
-                logger.warning(
-                    "You are passing both `text` and `images` to `PaliGemmaProcessor`. The processor expects special "
-                    "image tokens in the text, as many tokens as there are images per each text. It is recommended to "
-                    "add `<image>` tokens in the very beginning of your text and `<bos>` token after that. For this call, we will infer how many images "
-                    "each text has and add special tokens."
-                )
+                # logger.warning(
+                #     "You are passing both `text` and `images` to `PaliGemmaProcessor`. The processor expects special "
+                #     "image tokens in the text, as many tokens as there are images per each text. It is recommended to "
+                #     "add `<image>` tokens in the very beginning of your text and `<bos>` token after that. For this call, we will infer how many images "
+                #     "each text has and add special tokens."
+                # )
 
                 if isinstance(text, List) and isinstance(images, List):
                     if len(images) != len(text):
