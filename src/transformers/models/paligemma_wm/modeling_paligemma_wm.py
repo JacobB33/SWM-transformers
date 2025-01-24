@@ -524,6 +524,15 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
 
         # merge text and actions
         if action_values is not None:
+            # B, Max_Len, Action_Dim
+            # flatten B, Max_Len to B*Max_Len, Action_Dim keeping the order
+            
+            action_values = action_values.view(-1, action_values.size(-1))
+            # find all infinity values and remove them
+            action_values = action_values[~torch.isinf(action_values).any(dim=-1)]
+            
+            # print(action_values.shape)
+
             action_features = self.get_action_features(action_values)
             special_action_mask = (input_ids == self.config.action_token_index).unsqueeze(-1)
             special_action_mask = special_action_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
