@@ -21,7 +21,7 @@ from typing import List, Optional, Union, TypedDict
 from torch import Tensor
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
 from ...processing_utils import (
     ImagesKwargs,
     ProcessingKwargs,
@@ -107,30 +107,6 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token, num_i
         num_images (`int`): Number of images in the prompt.
     """
     return f"{image_token * image_seq_len * num_images}{action_token * num_actions}{bos_token}{prompt}\n"
-
-
-# Copied from transformers.models.llava_next.image_processing_llava_next.make_batched_images
-def make_batched_images(images) -> List[List[ImageInput]]:
-    """
-    Accepts images in list or nested list format, and makes a list of images for preprocessing.
-
-    Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
-            The input image.
-
-    Returns:
-        list: A list of images.
-    """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-        return images
-
-    elif is_valid_image(images):
-        return [images]
-
-    raise ValueError(f"Could not make batched video from {images}")
 
 
 class PaliGemmaWMProcessor(ProcessorMixin):
@@ -322,16 +298,16 @@ class PaliGemmaWMProcessor(ProcessorMixin):
                 # make a nested list of lists to be able to iterate over the images and text below
                 if is_valid_image(images):
                     images = [[images]]
-                elif isinstance(images, list) and is_valid_image(images[0]):
+                elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
                     images = [[image] for image in images]
-                elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
+
+                elif not (
+                    isinstance(images, (list, tuple))
+                    and isinstance(images[0], (list, tuple))
+                    and is_valid_image(images[0][0])
+                ):
                     raise ValueError("images must be an image, list of images or list of list of images")
 
-                if suffix is not None and _is_str_or_image(suffix):
-                    suffix = [suffix]
-                if suffix is not None:
-                    suffix = [sfx + self.tokenizer.eos_token for sfx in suffix]
-                
                 input_strings = [
                     build_string_from_input(
                         prompt=prompt,
@@ -344,10 +320,15 @@ class PaliGemmaWMProcessor(ProcessorMixin):
                     )
                     for prompt, image_list, num_actions in zip(text, images, action_lengths)
                 ]
-                images = make_batched_images(images)
+                images = make_flat_list_of_images(images)
             else:
                 text = [sample.replace(IMAGE_TOKEN, IMAGE_TOKEN * self.image_seq_length) for sample in text]
                 input_strings = [f"{sample}\n" for sample in text]
+
+        if suffix is not None and _is_str_or_image(suffix):
+            suffix = [suffix]
+        if suffix is not None:
+            suffix = [sfx + self.tokenizer.eos_token for sfx in suffix]
 
         pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 

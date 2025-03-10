@@ -21,7 +21,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache, StaticCache
+from ...cache_utils import Cache, HybridCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -31,6 +31,7 @@ from ...utils import (
     is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
+    is_torchdynamo_compiling,
 )
 from .configuration_paligemma_wm import PaliGemmaWMConfig
 from ...utils.deprecation import deprecate_kwarg
@@ -76,7 +77,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
         dtype (`torch.dtype`):
             The dtype to use for the 4D attention mask.
         device (`torch.device`):
-            The device to plcae the 4D attention mask on.
+            The device to place the 4D attention mask on.
         min_dtype (`float`):
             The minimum value representable with the dtype `dtype`.
         cache_position (`torch.Tensor`):
@@ -352,7 +353,7 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
     #     return self.language_model.tie_weights()
 
     def _update_causal_mask(
-        self, attention_mask, token_type_ids, inputs_embeds, past_key_values, cache_position, is_training: bool = False
+        self, attention_mask, token_type_ids,  past_key_values, cache_position, input_tensor, is_training: bool = False
     ):
         if self.config.text_config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
@@ -360,9 +361,8 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
             return None
 
         using_static_cache = isinstance(past_key_values, StaticCache)
-        dtype = inputs_embeds.dtype
-        min_dtype = torch.finfo(dtype).min
-        sequence_length = inputs_embeds.shape[1]
+        min_dtype = torch.finfo(self.dtype).min
+        inputs_lead_dim, sequence_length = input_tensor.shape[:2]
         if using_static_cache:
             target_length = past_key_values.get_max_length()
         else:
@@ -377,7 +377,7 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
             return attention_mask
 
         causal_mask = torch.full(
-            (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
+            (sequence_length, target_length), fill_value=min_dtype, dtype=self.dtype, device=cache_position.device
         )
         # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
         if sequence_length != 1:
@@ -387,20 +387,23 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
                 causal_mask[:, :sequence_length] = 0.0
 
         causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].expand(inputs_embeds.shape[0], 1, -1, -1)
+        causal_mask = causal_mask[None, None, :, :].expand(inputs_lead_dim, 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             mask_length = attention_mask.shape[-1]
+
+            # First unmask prefix tokens during training
+            if is_training:
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
+                )
+
+            # Then apply padding mask (will mask pad tokens)
             padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(causal_mask.device)
             padding_mask = padding_mask == 0
             causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                 padding_mask, min_dtype
             )
-            # we are training thus we need to create a full mask on the image + prefix but causal on suffix
-            if is_training:
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
-                )
         return causal_mask
 
     def get_image_features(self, pixel_values: torch.FloatTensor):
@@ -442,6 +445,7 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **lm_kwargs,
     ) -> Union[Tuple, PaliGemmaWMCausalLMOutputWithPast]:
         r"""
         Args:
@@ -480,8 +484,7 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "answer en Where is the cow standing?\nbeach"
         ```"""
-        if inputs_embeds is not None:
-            raise ValueError("inputs_embeds is not supported in PaliGemmaWMModel.forward(). (Sincec I don't know what they are)")
+
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -516,7 +519,7 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
 
             special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if inputs_embeds[special_image_mask].numel() != image_features.numel():
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
                 image_tokens_in_text = torch.sum(input_ids == self.config.image_token_index)
                 raise ValueError(
                     f"Number of images does not match number of special image tokens in the input text. "
@@ -560,7 +563,7 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
             labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, token_type_ids, inputs_embeds, past_key_values, cache_position, is_training
+            attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
         )
 
         outputs = self.language_model(
@@ -574,6 +577,7 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **lm_kwargs
         )
 
         logits = outputs.logits
@@ -624,6 +628,7 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
         token_type_ids=None,
         use_cache=True,
         logits_to_keep=None,
+        labels=None,
         **kwargs,
     ):
         # Overwritten -- custom `position_ids` and `pixel_values` and `action_values` handling
@@ -649,4 +654,13 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
             model_inputs["action_values"] = action_values
+
+        is_training = token_type_ids is not None and labels is not None
+        if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
+            input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
+            causal_mask = self._update_causal_mask(
+                attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training
+            )
+            model_inputs["attention_mask"] = causal_mask
+
         return model_inputs
