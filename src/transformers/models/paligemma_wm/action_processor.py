@@ -42,3 +42,4 @@ class PaliGemmaWMActionProcessor(ProcessorMixin):
         # print(lengths)
         return torch.from_numpy(np.array(inputs)), lengths
     
+__all__ = ["PaliGemmaWMActionProcessor"]

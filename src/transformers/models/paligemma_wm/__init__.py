@@ -13,44 +13,17 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
-
-
-_import_structure = {"configuration_paligemma_wm": ["PaliGemmaWMConfig"]}
-
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_paligemma_wm"] = [
-        "PaliGemmaWMForConditionalGeneration",
-        "PaliGemmaWMPreTrainedModel",
-    ]
-    _import_structure["processing_paligemma_wm"] = ["PaliGemmaWMProcessor"]
-    _import_structure["action_processor"] = ["PaliGemmaWMActionProcessor"]
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_paligemma import PaliGemmaWMConfig
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_paligemma_wm import (
-            PaliGemmaWMForConditionalGeneration,
-            PaliGemmaWMPreTrainedModel,
-        )
-        from .processing_paligemma_wm import PaliGemmaWMProcessor
-        from .action_processor import PaliGemmaWMActionProcessor
-
-
+    from .configuration_paligemma_wm import *
+    from .modeling_paligemma_wm import *
+    from .processing_paligemma_wm import *
+    from .action_processor import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

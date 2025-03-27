@@ -37,6 +37,7 @@ from ...tokenization_utils_base import (
 )
 from ...utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 IMAGE_TOKEN = "<image>"
@@ -127,19 +128,18 @@ class PaliGemmaWMProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer", "action_processor"]
     valid_kwargs = ["chat_template", "action_kwargs"]
-    image_processor_class = "SiglipImageProcessor"
+    image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
     action_processor_class = ("PaliGemmaWMActionProcessor")
 
     def __init__(
-            self,
-            image_processor=None,
-            tokenizer=None,
-            action_processor=None,
-            chat_template=None,
-            **kwargs,
-    ):
-        print(kwargs)
+        self,
+        image_processor=None,
+        tokenizer=None,
+        action_processor=None,
+        chat_template=None,
+        **kwargs,
+):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -175,13 +175,13 @@ class PaliGemmaWMProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, action_processor, chat_template=chat_template)
 
     def __call__(
-            self,
-            images: ImageInput = None,
-            actions: Union[List[List[Tensor]], List[Tensor]] = None,
-            text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-            audio=None,
-            videos=None,
-            **kwargs: Unpack[PaliGemmaWMProcessorKwargs],
+        self,
+        images: ImageInput = None,
+        actions: Union[List[List[Tensor]], List[Tensor]] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[PaliGemmaWMProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -266,14 +266,6 @@ class PaliGemmaWMProcessor(ProcessorMixin):
             pass
         
         if actions is not None:
-            # They have actions so tokenize them and get a list of the lengths 
-            # if len(actions) == 0:
-            #     # it is the empty list
-            #     actions = [actions]
-            #     logger.error("shouldn't be in the if")
-            # elif not isinstance(actions[0], list):
-            #     actions = [actions]
-            #     logger.error("shouldn't be in the elif")
             action_values, action_lengths = self.action_processor(actions)
         else:
             action_lengths = [0 for _ in range(len(text))]
@@ -372,3 +364,5 @@ class PaliGemmaWMProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+__all__ = ["PaliGemmaWMProcessor"]

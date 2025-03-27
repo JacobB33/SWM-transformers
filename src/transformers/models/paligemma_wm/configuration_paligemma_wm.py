@@ -133,9 +133,6 @@ class PaliGemmaWMConfig(PretrainedConfig):
                 is_encoder_decoder=False,
                 vocab_size=vocab_size,
             )
-            
-        
-        
         self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
         self.vision_config.projection_dim = projection_dim
         super().__init__(**kwargs)
@@ -156,3 +153,5 @@ class PaliGemmaWMConfig(PretrainedConfig):
         output = super().to_dict()
         output.pop("_ignore_index", None)
         return output
+
+__all__ = ["PaliGemmaWMConfig"]
