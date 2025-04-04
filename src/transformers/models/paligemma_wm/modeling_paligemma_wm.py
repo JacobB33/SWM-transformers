@@ -454,7 +454,7 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **lm_kwargs,
+       # **lm_kwargs,
     ) -> Union[Tuple, PaliGemmaWMCausalLMOutputWithPast]:
         r"""
         Args:
@@ -595,7 +595,7 @@ class PaliGemmaWMForConditionalGeneration(PaliGemmaWMPreTrainedModel, Generation
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs
+           # **lm_kwargs
         )
 
         logits = outputs[0]
