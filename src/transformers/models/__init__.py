@@ -257,6 +257,7 @@ if TYPE_CHECKING:
     from .owlv2 import *
     from .owlvit import *
     from .paligemma import *
+    from .paligemma_wm import *
     from .parakeet import *
     from .patchtsmixer import *
     from .patchtst import *
